@@ -1,12 +1,14 @@
 package main
 
 import (
+	"runtime"
+	"fmt"
 	"encoding/csv"
 	"errors"
-	"fmt"
 	"math/rand"
 	"os"
 	"strconv"
+	"math"
 )
 
 type Individual struct {
@@ -18,6 +20,18 @@ type DatasetRow struct {
 	Features []float64
 	Tag      string
 }
+ 
+func (x *DatasetRow) EuclideanDistance(y DatasetRow) float64 {
+
+	distance := 0.0
+
+	for index := 0; index < len(x.Features); index++ {
+		distance += math.Pow(y.Features[index] - x.Features[index], 2)
+	}
+
+	return math.Sqrt(distance)
+}
+
 type Dataset struct {
 	Rows []DatasetRow
 }
@@ -65,18 +79,13 @@ func GetPreparedDataset(individual Individual, dataset *Dataset) Dataset {
 	return newDataset
 }
 
-func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset) {
+func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset, k int) {
 
 	for index := 0; index < len(population); index++ {
 		preparedTrainingDataset := GetPreparedDataset(population[index], trainingDataset)
 		preparedTestingDataset := GetPreparedDataset(population[index], testingDataset)
 
-		// executa knn
-		// atribui fitness
-
-		fmt.Print(preparedTestingDataset, preparedTrainingDataset)
-
-		population[index].Fitness = 0.7
+		population[index].Fitness = Knn(preparedTrainingDataset, preparedTestingDataset, k)
 	}
 }
 
@@ -112,15 +121,22 @@ func LoadDataset(filePath string) (*Dataset, error) {
 
 func main() {
 
+	runtime.GOMAXPROCS(12)
+
+
 	// reader := csv.NewReader(bufio.NewReader(trainingFile))
 
-	populationSize := 10
-	nFeatures := 7
+	// populationSize := 10
+	// nFeatures := 7
+	k := 3
 
-	population := InitPopulation(populationSize, nFeatures)
+	// population := InitPopulation(populationSize, nFeatures)
 
-	trainingDataset, _ := LoadDataset("./treinamento-basic.txt")
-	testingDataset, _ := LoadDataset("./treinamento-basic.txt")
+	trainingDataset, _ := LoadDataset("./treinamento.txt")
+	testingDataset, _ := LoadDataset("./teste.txt")
 
-	ComputeFitness(population, trainingDataset, testingDataset)
+	// ComputeFitness(population, trainingDataset, testingDataset, k)
+	x := Knn(*trainingDataset, *testingDataset, k)
+	fmt.Println(x)
+	
 }

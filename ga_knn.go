@@ -1,6 +1,8 @@
 package main
 
 import (
+	"sync"
+	"github.com/bradfitz/slice"
 	"runtime"
 	"fmt"
 	"encoding/csv"
@@ -67,7 +69,7 @@ func GetPreparedDataset(individual Individual, dataset *Dataset) Dataset {
 
 		row := DatasetRow{Features: make([]float64, 0), Tag: dataset.Rows[i].Tag}
 
-		for j := 0; j < len(dataset.Rows[i].Features); j++ {
+		for j := 0; j < len(individual.Genome); j++ {
 
 			if individual.Genome[j] == 1 {
 				row.Features = append(row.Features, dataset.Rows[i].Features[j])
@@ -79,14 +81,97 @@ func GetPreparedDataset(individual Individual, dataset *Dataset) Dataset {
 	return newDataset
 }
 
-func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset, k int) {
+func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset, k int) float64 {
+
+
+    var wg sync.WaitGroup
+
+	wg.Add(len(population))
+
 
 	for index := 0; index < len(population); index++ {
-		preparedTrainingDataset := GetPreparedDataset(population[index], trainingDataset)
-		preparedTestingDataset := GetPreparedDataset(population[index], testingDataset)
+		// preparedTrainingDataset := GetPreparedDataset(population[index], trainingDataset)
+		// preparedTestingDataset := GetPreparedDataset(population[index], testingDataset)
 
-		population[index].Fitness = Knn(preparedTrainingDataset, preparedTestingDataset, k)
+		// population[index].Fitness = Knn(preparedTrainingDataset, preparedTestingDataset, k)
+
+		go func(i int) {
+			preparedTrainingDataset := GetPreparedDataset(population[i], trainingDataset)
+			preparedTestingDataset := GetPreparedDataset(population[i], testingDataset)
+			population[i].Fitness = Knn(preparedTrainingDataset, preparedTestingDataset, k)
+			defer wg.Done()		}(index)
 	}
+
+    wg.Wait()
+
+	// Ordena do maior fitness para o menor
+	slice.Sort(population[:], func(i, j int) bool {
+		return population[i].Fitness > population[j].Fitness
+	})
+
+	return population[0].Fitness
+}
+
+
+// SelectParents 
+func SelectParents(population []Individual) []Individual {
+	parents := make([]Individual, 0)
+
+	for index := 0; index < len(population) / 2; index++ {
+		parents = append(parents, population[index])
+	}
+
+	return parents
+}
+
+func Crossover(population []Individual) []Individual {
+
+	childs := make([]Individual, 0)
+
+	for index := 0; index < len(population); index++ {
+		
+		idx1 := rand.Intn(len(population))
+		idx2 := rand.Intn(len(population))
+
+		middle := len(population)/2
+
+		child1 := Individual{Fitness: 0.0, Genome: make([]byte, 0)}
+		child1.Genome = append(population[idx1].Genome[:middle+1], population[idx2].Genome[middle+1:]...)
+
+		child2 := Individual{Fitness: 0.0, Genome: make([]byte, 0)}
+		child2.Genome = append(population[idx2].Genome[:middle+1], population[idx1].Genome[middle+1:]...)
+
+		childs = append(childs, child1, child2)
+	}
+
+	return childs
+}
+
+func Mutate(population []Individual, mutationRate float64) []Individual {
+	mutatedPopulation := make([]Individual, 0)
+
+	for index := 0; index < len(population); index++ {
+		mutatedIndividual := Individual{Genome: make([]byte, 0), Fitness: 0.0}
+
+		for j := 0; j < len(population[index].Genome); j++ {
+
+			bit := population[index].Genome[j]
+			
+			if rand.Float64() < mutationRate {
+				if bit == 0 {
+					bit = 1
+				} else {
+					bit = 0
+				}
+			}
+
+			mutatedIndividual.Genome = append(mutatedIndividual.Genome, bit)
+		}
+
+		mutatedPopulation = append(mutatedPopulation, mutatedIndividual)
+	}
+
+	return mutatedPopulation
 }
 
 func LoadDataset(filePath string) (*Dataset, error) {
@@ -119,6 +204,7 @@ func LoadDataset(filePath string) (*Dataset, error) {
 	return &dataset, nil
 }
 
+
 func main() {
 
 	runtime.GOMAXPROCS(12)
@@ -126,17 +212,37 @@ func main() {
 
 	// reader := csv.NewReader(bufio.NewReader(trainingFile))
 
-	// populationSize := 10
-	// nFeatures := 7
+	populationSize := 100
+	nFeatures := 132
 	k := 3
+	mutationRate := 0.01
+	iterations := 50
 
-	// population := InitPopulation(populationSize, nFeatures)
+	maxFitness := 0.0
+
+	population := InitPopulation(populationSize, nFeatures)
 
 	trainingDataset, _ := LoadDataset("./treinamento.txt")
 	testingDataset, _ := LoadDataset("./teste.txt")
 
-	// ComputeFitness(population, trainingDataset, testingDataset, k)
-	x := Knn(*trainingDataset, *testingDataset, k)
-	fmt.Println(x)
+
+	for index := 0; index < iterations; index++ {
+		
+		fmt.Println("Iteração ", index)
+
+		localFitness  := ComputeFitness(population, trainingDataset, testingDataset, k)
+		fmt.Println("Fitness ", localFitness)
 	
+		if (localFitness > maxFitness) {
+			maxFitness = localFitness
+			fmt.Println("Novo fitness máximo ", maxFitness)
+		}
+	
+		parents := SelectParents(population)
+		childs := Crossover(parents)
+		mutated := Mutate(childs, mutationRate)
+	
+		population = mutated[:]
+	}
+
 }

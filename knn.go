@@ -55,31 +55,6 @@ func Knn(trainingDataset Dataset, testingDataset Dataset, k int) float64 {
 		if vote == trainingDataset.Rows[index].Tag {
 			correctResponses++
 		}
-		// votes := make(map[string]int)
-
-		// for dist := 0; dist 
-	// populationSize := 10
-	// nFeatures := 7< k; dist++ {
-		// 	_, ok := votes[distances[dist].tag]
-		// 	if !ok {
-		// 		votes[distances[dist].tag] = 0
-		// 	}
-		// 	votes[distances[dist].tag]++
-		// }
-		
-	
-        // n := map[int][]string{}
-		// var a []int
-        // for k, v := range votes {
-        //         n[v] = append(n[v], k)
-        // }
-        // for k := range n {
-        //         a = append(a, k)
-        // }
-		// sort.Sort(sort.Reverse(sort.IntSlice(a)))	
-		
-		// fmt.Print(a)
-		
 
 	}
 

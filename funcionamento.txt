@@ -1,0 +1,11 @@
+1. Instalar Go
+    sudo apt install golang
+
+2. Instalar dependências
+
+    go get -u github.com/bradfitz/slice
+    go get -u github.com/logrusorgru/aurora
+
+3. Executar programa
+
+    go run *.go

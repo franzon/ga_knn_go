@@ -1,16 +1,18 @@
 package main
 
 import (
-	"sync"
-	"github.com/bradfitz/slice"
-	"runtime"
-	"fmt"
 	"encoding/csv"
 	"errors"
+	"fmt"
+	"github.com/bradfitz/slice"
+	. "github.com/logrusorgru/aurora"
+	"math"
 	"math/rand"
 	"os"
+	"runtime"
 	"strconv"
-	"math"
+	"sync"
+	"time"
 )
 
 type Individual struct {
@@ -22,13 +24,13 @@ type DatasetRow struct {
 	Features []float64
 	Tag      string
 }
- 
+
 func (x *DatasetRow) EuclideanDistance(y DatasetRow) float64 {
 
 	distance := 0.0
 
 	for index := 0; index < len(x.Features); index++ {
-		distance += math.Pow(y.Features[index] - x.Features[index], 2)
+		distance += math.Pow(y.Features[index]-x.Features[index], 2)
 	}
 
 	return math.Sqrt(distance)
@@ -59,12 +61,6 @@ func InitPopulation(size int, nFeatures int) []Individual {
 func GetPreparedDataset(individual Individual, dataset *Dataset) Dataset {
 	newDataset := Dataset{Rows: make([]DatasetRow, 0)}
 
-	// for index := 0; index < len(individual.Genome); index++ {
-	// 	if individual.Genome[index] == 1 {
-	// 		newDataset.Rows = append(newDataset.Rows, dataset.Rows[index])
-	// 	}
-	// }
-
 	for i := 0; i < len(dataset.Rows); i++ {
 
 		row := DatasetRow{Features: make([]float64, 0), Tag: dataset.Rows[i].Tag}
@@ -81,43 +77,37 @@ func GetPreparedDataset(individual Individual, dataset *Dataset) Dataset {
 	return newDataset
 }
 
-func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset, k int) float64 {
+func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset, k int) Individual {
 
-
-    var wg sync.WaitGroup
+	var wg sync.WaitGroup
 
 	wg.Add(len(population))
 
-
 	for index := 0; index < len(population); index++ {
-		// preparedTrainingDataset := GetPreparedDataset(population[index], trainingDataset)
-		// preparedTestingDataset := GetPreparedDataset(population[index], testingDataset)
-
-		// population[index].Fitness = Knn(preparedTrainingDataset, preparedTestingDataset, k)
 
 		go func(i int) {
 			preparedTrainingDataset := GetPreparedDataset(population[i], trainingDataset)
 			preparedTestingDataset := GetPreparedDataset(population[i], testingDataset)
-			population[i].Fitness = Knn(preparedTrainingDataset, preparedTestingDataset, k)
-			defer wg.Done()		}(index)
+			population[i].Fitness = Knn(&preparedTrainingDataset, &preparedTestingDataset, k)
+			defer wg.Done()
+		}(index)
 	}
 
-    wg.Wait()
+	wg.Wait()
 
 	// Ordena do maior fitness para o menor
 	slice.Sort(population[:], func(i, j int) bool {
 		return population[i].Fitness > population[j].Fitness
 	})
 
-	return population[0].Fitness
+	return population[0]
 }
 
-
-// SelectParents 
+// SelectParents
 func SelectParents(population []Individual) []Individual {
 	parents := make([]Individual, 0)
 
-	for index := 0; index < len(population) / 2; index++ {
+	for index := 0; index < len(population)/2; index++ {
 		parents = append(parents, population[index])
 	}
 
@@ -129,17 +119,17 @@ func Crossover(population []Individual) []Individual {
 	childs := make([]Individual, 0)
 
 	for index := 0; index < len(population); index++ {
-		
+
 		idx1 := rand.Intn(len(population))
 		idx2 := rand.Intn(len(population))
 
-		middle := len(population)/2
+		splitPoint := rand.Intn(len(population))
 
 		child1 := Individual{Fitness: 0.0, Genome: make([]byte, 0)}
-		child1.Genome = append(population[idx1].Genome[:middle+1], population[idx2].Genome[middle+1:]...)
+		child1.Genome = append(population[idx1].Genome[:splitPoint+1], population[idx2].Genome[splitPoint+1:]...)
 
 		child2 := Individual{Fitness: 0.0, Genome: make([]byte, 0)}
-		child2.Genome = append(population[idx2].Genome[:middle+1], population[idx1].Genome[middle+1:]...)
+		child2.Genome = append(population[idx2].Genome[:splitPoint+1], population[idx1].Genome[splitPoint+1:]...)
 
 		childs = append(childs, child1, child2)
 	}
@@ -156,7 +146,7 @@ func Mutate(population []Individual, mutationRate float64) []Individual {
 		for j := 0; j < len(population[index].Genome); j++ {
 
 			bit := population[index].Genome[j]
-			
+
 			if rand.Float64() < mutationRate {
 				if bit == 0 {
 					bit = 1
@@ -204,45 +194,56 @@ func LoadDataset(filePath string) (*Dataset, error) {
 	return &dataset, nil
 }
 
-
 func main() {
 
-	runtime.GOMAXPROCS(12)
+	first := time.Now()
 
-
-	// reader := csv.NewReader(bufio.NewReader(trainingFile))
+	fmt.Println("Algoritmo Genético + k-NN")
+	fmt.Println("Cores CPU: ", runtime.NumCPU())
 
 	populationSize := 100
 	nFeatures := 132
-	k := 3
-	mutationRate := 0.01
-	iterations := 50
+	k := 1
+	mutationRate := 0.05
+	iterations := 500
 
-	maxFitness := 0.0
+	bestIndividual := Individual{Fitness: 0.0}
 
 	population := InitPopulation(populationSize, nFeatures)
 
+	fmt.Println("Carregando datasets...")
 	trainingDataset, _ := LoadDataset("./treinamento.txt")
 	testingDataset, _ := LoadDataset("./teste.txt")
 
+	fmt.Println("Iniciando execução")
 
 	for index := 0; index < iterations; index++ {
-		
-		fmt.Println("Iteração ", index)
 
-		localFitness  := ComputeFitness(population, trainingDataset, testingDataset, k)
-		fmt.Println("Fitness ", localFitness)
-	
-		if (localFitness > maxFitness) {
-			maxFitness = localFitness
-			fmt.Println("Novo fitness máximo ", maxFitness)
-		}
-	
+		fmt.Println("Iteração: ", index)
+
+		now := time.Now()
+		localFitness := ComputeFitness(population, trainingDataset, testingDataset, k)
+		fmt.Println("Fitness: ", localFitness.Fitness)
+
 		parents := SelectParents(population)
 		childs := Crossover(parents)
 		mutated := Mutate(childs, mutationRate)
-	
+
+		if localFitness.Fitness > bestIndividual.Fitness {
+			bestIndividual = localFitness
+			fmt.Println(Green("Novo fitness máximo: "), Bold(Green(bestIndividual.Fitness)))
+			fmt.Println(Blue("Melhor genoma: "), Bold(Blue(bestIndividual.Genome)))
+		}
+
 		population = mutated[:]
+
+		fmt.Println("Tempo para executar iteração (segundos): ", time.Now().Sub(now).Seconds())
+		fmt.Println("")
 	}
+
+	fmt.Println(Red("Execução finalizada."))
+	fmt.Println(Green("Fitness máximo obtido: "), Bold(Green(bestIndividual.Fitness)))
+	fmt.Println(Blue("Melhor genoma: "), Bold(Blue(bestIndividual.Genome)))
+	fmt.Println("Tempo total (segundos): ", time.Now().Sub(first).Seconds())
 
 }

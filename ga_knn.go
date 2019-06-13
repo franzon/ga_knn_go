@@ -5,37 +5,30 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bradfitz/slice"
-	. "github.com/logrusorgru/aurora"
+	"github.com/logrusorgru/aurora"
 	"math"
 	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
+// Individual Representa um indivíuo
 type Individual struct {
 	Genome  []byte
 	Fitness float64
 }
 
+// DatasetRow Representa uma entrada em um Dataset
 type DatasetRow struct {
 	Features []float64
 	Tag      string
 }
 
-func (x *DatasetRow) EuclideanDistance(y DatasetRow) float64 {
-
-	distance := 0.0
-
-	for index := 0; index < len(x.Features); index++ {
-		distance += math.Pow(y.Features[index]-x.Features[index], 2)
-	}
-
-	return math.Sqrt(distance)
-}
-
+// Dataset Representa um Dataset
 type Dataset struct {
 	Rows []DatasetRow
 }
@@ -58,26 +51,8 @@ func InitPopulation(size int, nFeatures int) []Individual {
 	return population
 }
 
-func GetPreparedDataset(individual Individual, dataset *Dataset) Dataset {
-	newDataset := Dataset{Rows: make([]DatasetRow, 0)}
-
-	for i := 0; i < len(dataset.Rows); i++ {
-
-		row := DatasetRow{Features: make([]float64, 0), Tag: dataset.Rows[i].Tag}
-
-		for j := 0; j < len(individual.Genome); j++ {
-
-			if individual.Genome[j] == 1 {
-				row.Features = append(row.Features, dataset.Rows[i].Features[j])
-			}
-		}
-
-		newDataset.Rows = append(newDataset.Rows, row)
-	}
-	return newDataset
-}
-
-func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset, k int) Individual {
+// ComputeFitness Calcula o fitness usando knn
+func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDataset *Dataset) Individual {
 
 	var wg sync.WaitGroup
 
@@ -86,9 +61,8 @@ func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDa
 	for index := 0; index < len(population); index++ {
 
 		go func(i int) {
-			preparedTrainingDataset := GetPreparedDataset(population[i], trainingDataset)
-			preparedTestingDataset := GetPreparedDataset(population[i], testingDataset)
-			population[i].Fitness = Knn(&preparedTrainingDataset, &preparedTestingDataset, k)
+
+			population[i].Fitness = Knn(population[i], trainingDataset, testingDataset)
 			defer wg.Done()
 		}(index)
 	}
@@ -103,17 +77,18 @@ func ComputeFitness(population []Individual, trainingDataset *Dataset, testingDa
 	return population[0]
 }
 
-// SelectParents
+// SelectParents Seleciona os pais
 func SelectParents(population []Individual) []Individual {
 	parents := make([]Individual, 0)
 
-	for index := 0; index < len(population)/2; index++ {
+	for index := 0; index < int(math.Ceil(float64(len(population))/2)); index++ {
 		parents = append(parents, population[index])
 	}
 
 	return parents
 }
 
+// Crossover Realiza o cruzamento
 func Crossover(population []Individual) []Individual {
 
 	childs := make([]Individual, 0)
@@ -137,6 +112,7 @@ func Crossover(population []Individual) []Individual {
 	return childs
 }
 
+// Mutate Realiza mutação
 func Mutate(population []Individual, mutationRate float64) []Individual {
 	mutatedPopulation := make([]Individual, 0)
 
@@ -164,6 +140,7 @@ func Mutate(population []Individual, mutationRate float64) []Individual {
 	return mutatedPopulation
 }
 
+// LoadDataset Carrega um Dataset
 func LoadDataset(filePath string) (*Dataset, error) {
 	f, err := os.Open(filePath)
 	defer f.Close()
@@ -203,8 +180,7 @@ func main() {
 
 	populationSize := 100
 	nFeatures := 132
-	k := 1
-	mutationRate := 0.05
+	mutationRate := 0.01
 	iterations := 500
 
 	bestIndividual := Individual{Fitness: 0.0}
@@ -222,18 +198,23 @@ func main() {
 		fmt.Println("Iteração: ", index)
 
 		now := time.Now()
-		localFitness := ComputeFitness(population, trainingDataset, testingDataset, k)
+		localFitness := ComputeFitness(population, trainingDataset, testingDataset)
 		fmt.Println("Fitness: ", localFitness.Fitness)
-
-		parents := SelectParents(population)
-		childs := Crossover(parents)
-		mutated := Mutate(childs, mutationRate)
 
 		if localFitness.Fitness > bestIndividual.Fitness {
 			bestIndividual = localFitness
-			fmt.Println(Green("Novo fitness máximo: "), Bold(Green(bestIndividual.Fitness)))
-			fmt.Println(Blue("Melhor genoma: "), Bold(Blue(bestIndividual.Genome)))
+			fmt.Println(aurora.Green("Novo fitness máximo: "), aurora.Bold(aurora.Green(bestIndividual.Fitness)))
+
+			tmp := make([]string, nFeatures)
+			for z := 0; z < nFeatures; z++ {
+				tmp[z] = strconv.Itoa(int(bestIndividual.Genome[z]))
+			}
+			fmt.Println(aurora.Blue("Melhor genoma: "), aurora.Bold(aurora.Blue(strings.Join(tmp, ","))))
+
 		}
+		parents := SelectParents(population)
+		childs := Crossover(parents)
+		mutated := Mutate(childs, mutationRate)
 
 		population = mutated[:]
 
@@ -241,9 +222,9 @@ func main() {
 		fmt.Println("")
 	}
 
-	fmt.Println(Red("Execução finalizada."))
-	fmt.Println(Green("Fitness máximo obtido: "), Bold(Green(bestIndividual.Fitness)))
-	fmt.Println(Blue("Melhor genoma: "), Bold(Blue(bestIndividual.Genome)))
+	fmt.Println(aurora.Red("Execução finalizada."))
+	fmt.Println(aurora.Green("Fitness máximo obtido: "), aurora.Bold(aurora.Green(bestIndividual.Fitness)))
+	fmt.Println(aurora.Blue("Melhor genoma: "), aurora.Bold(aurora.Blue(bestIndividual.Genome)))
 	fmt.Println("Tempo total (segundos): ", time.Now().Sub(first).Seconds())
 
 }

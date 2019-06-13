@@ -1,38 +1,46 @@
 package main
 
 import (
-	"github.com/bradfitz/slice"
+	"math"
 )
 
+// DistanceTag Distância e tag
 type DistanceTag struct {
 	distance float64
 	tag      string
 }
 
-func Knn(trainingDataset *Dataset, testingDataset *Dataset, k int) float64 {
+// EuclideanDistance Distância euclidiana
+func EuclideanDistance(bitString []byte, row1, row2 *DatasetRow) float64 {
+	distance := 0.0
 
+	for i := 0; i < len(bitString); i++ {
+		if bitString[i] == 1 {
+			distance += math.Pow(row2.Features[i]-row1.Features[i], 2)
+		}
+	}
+
+	return math.Sqrt(distance)
+}
+
+// Knn Função k-NN
+func Knn(individual Individual, trainingDataset *Dataset, testingDataset *Dataset) float64 {
 	correctResponses := 0.0
 
-	for index := 0; index < len(testingDataset.Rows); index++ {
-		distances := make([]DistanceTag, 0)
+	for i := 0; i < len(testingDataset.Rows); i++ {
 
-		for j := 0; j < len(trainingDataset.Rows); j++ {
+		nearest := DistanceTag{distance: EuclideanDistance(individual.Genome, &testingDataset.Rows[i], &trainingDataset.Rows[0])}
+		for j := 1; j < len(trainingDataset.Rows); j++ {
 
-			distance := testingDataset.Rows[index].EuclideanDistance(trainingDataset.Rows[j])
-			distanceTag := DistanceTag{distance: distance, tag: trainingDataset.Rows[j].Tag}
-			distances = append(distances, distanceTag)
+			distance := EuclideanDistance(individual.Genome, &testingDataset.Rows[i], &trainingDataset.Rows[j])
+			if distance < nearest.distance {
+				nearest = DistanceTag{distance: distance, tag: trainingDataset.Rows[j].Tag}
+			}
 		}
 
-		slice.Sort(distances[:], func(i, j int) bool {
-			return distances[i].distance < distances[j].distance
-		})
-
-		vote := distances[0].tag
-
-		if vote == trainingDataset.Rows[index].Tag {
+		if testingDataset.Rows[i].Tag == nearest.tag {
 			correctResponses++
 		}
-
 	}
 
 	return correctResponses / float64(len(testingDataset.Rows))

@@ -29,10 +29,10 @@ func Knn(individual Individual, trainingDataset *Dataset, testingDataset *Datase
 
 	for i := 0; i < len(testingDataset.Rows); i++ {
 
-		nearest := DistanceTag{distance: EuclideanDistance(individual.Genome, &testingDataset.Rows[i], &trainingDataset.Rows[0])}
-		for j := 1; j < len(trainingDataset.Rows); j++ {
+		nearest := DistanceTag{distance: math.MaxFloat64}
+		for j := 0; j < len(trainingDataset.Rows); j++ {
 
-			distance := EuclideanDistance(individual.Genome, &testingDataset.Rows[i], &trainingDataset.Rows[j])
+			distance :=  EuclideanDistance(individual.Genome, &testingDataset.Rows[i], &trainingDataset.Rows[j])
 			if distance < nearest.distance {
 				nearest = DistanceTag{distance: distance, tag: trainingDataset.Rows[j].Tag}
 			}
